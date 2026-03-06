@@ -1,0 +1,5 @@
+{
+  "name": "ERP Filename Validator - Adding case sensitivity",
+  "description": "A robust tool for normalizing image filenames, extracting product codes, and validating them against ERP master data with fuzzy matching capabilities.",
+  "requestFramePermissions": []
+}
