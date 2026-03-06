@@ -10,7 +10,7 @@ export enum FileStatus {
   ERROR = 'ERROR'
 }
 
-export type MatchStatus = 'SUCCESS' | 'FUZZY' | 'CHECKED' | 'FAILURE';
+export type MatchStatus = 'SUCCESS' | 'FUZZY' | 'Multi Colour AP21 - Cant Find' | 'Multi Colour AP21 - No Reference' | 'Multi Colour in Name' | 'FAILURE';
 
 export interface ERPRecord {
   productCode: string;
@@ -72,6 +72,7 @@ export interface MatchResult extends ExtractedInfo {
   erpStyleCategory?: string;
   erpProductName?: string;
   
+  colorVariantCount?: number;
   status: MatchStatus;
   reason: string;
 }

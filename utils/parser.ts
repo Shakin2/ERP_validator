@@ -21,9 +21,12 @@ const isDescriptiveWord = (token: string): boolean => {
 };
 
 export const parseFilename = (inputName: string, path: string = ""): ExtractedInfo => {
-  const nameNoExt = inputName.includes('.') 
-    ? inputName.substring(0, inputName.lastIndexOf('.')) 
-    : inputName;
+  // Strip MRLW- prefix (case-insensitive) as it is not relevant for matching
+  const cleanedName = inputName.replace(/^MRLW-/i, '');
+
+  const nameNoExt = cleanedName.includes('.')
+    ? cleanedName.substring(0, cleanedName.lastIndexOf('.'))
+    : cleanedName;
 
   // Extract brand hint from directory structure if available
   const brandMatch = path.match(/Imagery - ([^\/\\]+)/i);

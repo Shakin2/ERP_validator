@@ -674,7 +674,8 @@ const App: React.FC = () => {
                 isMatch: true,
                 isFuzzy: false,
                 ...directMatch,
-                status: 'CHECKED' as const,
+                colorVariantCount: colorCount,
+                status: 'Multi Colour AP21 - Cant Find' as const,
                 reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours. Colour hint "${colorHint}" not resolved. Available CLRCodes: ${availableClrCodes.join(', ')}`
               };
             }
@@ -688,7 +689,8 @@ const App: React.FC = () => {
               isMatch: true,
               isFuzzy: false,
               ...directMatch,
-              status: 'CHECKED' as const,
+              colorVariantCount: colorCount,
+              status: 'Multi Colour AP21 - No Reference' as const,
               reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours but no colour detected in filename. Available CLRCodes: ${availableClrCodes.join(', ')}`
             };
           }
@@ -705,8 +707,9 @@ const App: React.FC = () => {
             isMatch: true,
             isFuzzy: false,
             ...directMatch,
-            status: needsCheck ? 'CHECKED' as const : 'SUCCESS' as const,
-            reason: needsCheck 
+            colorVariantCount: colorCount,
+            status: needsCheck ? 'Multi Colour in Name' as const : 'SUCCESS' as const,
+            reason: needsCheck
               ? `Partial match: ${matchedAtStage} (filename suggests more colors)`
               : `Direct match: ${matchedAtStage}`
           };
@@ -736,7 +739,8 @@ const App: React.FC = () => {
               isFuzzy: true,
               fuzzyMatchCode: bestFuzzy.code,
               ...fuzzyRecord,
-              status: needsCheck ? 'CHECKED' as const : 'FUZZY' as const,
+              colorVariantCount: styleCodeDistinctColorCount.get(fuzzyRecord.styleCode) || 0,
+              status: needsCheck ? 'Multi Colour in Name' as const : 'FUZZY' as const,
               reason: needsCheck
                 ? `Fuzzy partial match: "${bestFuzzy.source}" to "${bestFuzzy.code}" (filename suggests more colors)`
                 : `Fuzzy matched "${bestFuzzy.source}" to "${bestFuzzy.code}"`
@@ -760,7 +764,7 @@ const App: React.FC = () => {
       setResults(matchedResults);
       setStatus(FileStatus.PROCESSING);
 
-      console.log(`Initial validation complete: ${matchedResults.filter(r => r.status === 'SUCCESS').length} success, ${matchedResults.filter(r => r.status === 'FUZZY').length} fuzzy, ${matchedResults.filter(r => r.status === 'CHECKED').length} checked, ${matchedResults.filter(r => r.status === 'FAILURE').length} failed`);
+      console.log(`Initial validation complete: ${matchedResults.filter(r => r.status === 'SUCCESS').length} success, ${matchedResults.filter(r => r.status === 'FUZZY').length} fuzzy, ${matchedResults.filter(r => r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name').length} checked, ${matchedResults.filter(r => r.status === 'FAILURE').length} failed`);
 
       // --- STAGE 4: Color-Based Fallback (ONLY for failures) ---
       const failedMatches = matchedResults.filter(r => r.status === 'FAILURE');
@@ -905,7 +909,8 @@ const App: React.FC = () => {
                       isMatch: true,
                       isFuzzy: false,
                       ...found,
-                      status: needsCheck ? 'CHECKED' as const : 'SUCCESS' as const,
+                      colorVariantCount: styleCodeDistinctColorCount.get(found.styleCode) || 0,
+                      status: needsCheck ? 'Multi Colour in Name' as const : 'SUCCESS' as const,
                       reason: needsCheck
                         ? `Color-based partial match: ${candidate} (filename suggests more colors)`
                         : `Color-based match: ${candidate}`
@@ -939,7 +944,8 @@ const App: React.FC = () => {
                       isFuzzy: true,
                       fuzzyMatchCode: bestFuzzy.code,
                       ...fuzzyRecord,
-                      status: needsCheck ? 'CHECKED' as const : 'FUZZY' as const,
+                      colorVariantCount: styleCodeDistinctColorCount.get(fuzzyRecord.styleCode) || 0,
+                      status: needsCheck ? 'Multi Colour in Name' as const : 'FUZZY' as const,
                       reason: needsCheck
                         ? `Color-based fuzzy partial match: "${bestFuzzy.source}" to "${bestFuzzy.code}" (filename suggests more colors)`
                         : `Color-based fuzzy match: "${bestFuzzy.source}" to "${bestFuzzy.code}"`
@@ -950,8 +956,8 @@ const App: React.FC = () => {
                 return result;
               });
               
-              const newSuccesses = matchedResults.filter(r => 
-                (r.status === 'SUCCESS' || r.status === 'CHECKED') && r.reason?.includes('Color-based')
+              const newSuccesses = matchedResults.filter(r =>
+                (r.status === 'SUCCESS' || r.status === 'Multi Colour in Name') && r.reason?.includes('Color-based')
               ).length;
               
               console.log(`Color fallback recovered ${newSuccesses} additional matches`);
@@ -1062,12 +1068,12 @@ const App: React.FC = () => {
   };
 
   const exportResults = () => {
-    const successHeader = "File Name,Status,Product Code,Name,Brand,Category,CLRIDX,Colour Code,Gender,Product End Use,Product Model,Product Range,Style Sub Range,Product Sub Category,Product Type,Style Colour\n";
+    const successHeader = "File Name,Status,Product Code,Name,Brand,Category,CLRIDX,Colour Code,Gender,Product End Use,Product Model,Product Range,Style Sub Range,Product Sub Category,Product Type,Style Colour,Colour Variant Count\n";
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
-      .filter(r => r.status === 'SUCCESS' || r.status === 'FUZZY' || r.status === 'CHECKED')
-      .map(r => `"${r.fileName}","${r.status}","${r.isFuzzy ? r.fuzzyMatchCode : r.productCode}","${r.name || ''}","${r.brand || ''}","${r.category || ''}","${r.clridx || ''}","${r.colourCode || ''}","${r.gender || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productRange || ''}","${r.productSubCategory || ''}","${r.productType || ''}","${r.styleColour || ''}"`)
+      .filter(r => r.status === 'SUCCESS' || r.status === 'FUZZY' || r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name')
+      .map(r => `"${r.fileName}","${r.status}","${r.isFuzzy ? r.fuzzyMatchCode : r.productCode}","${r.name || ''}","${r.brand || ''}","${r.category || ''}","${r.clridx || ''}","${r.colourCode || ''}","${r.gender || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productRange || ''}","${r.productSubCategory || ''}","${r.productType || ''}","${r.styleColour || ''}","${r.colorVariantCount ?? 0}"`)
       .join('\n');
 
     const failureRows = results
@@ -1087,7 +1093,7 @@ const App: React.FC = () => {
     total: results.length,
     success: results.filter(r => r.status === 'SUCCESS').length,
     fuzzy: results.filter(r => r.status === 'FUZZY').length,
-    checked: results.filter(r => r.status === 'CHECKED').length,
+    checked: results.filter(r => r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name').length,
     failure: results.filter(r => r.status === 'FAILURE').length
   };
 
