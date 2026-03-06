@@ -1072,12 +1072,12 @@ const App: React.FC = () => {
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
-      .filter(r => r.status === 'SUCCESS' || r.status === 'FUZZY' || r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name')
+      .filter(r => r.status === 'SUCCESS' || r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name')
       .map(r => `"${r.fileName}","${r.status}","${r.isFuzzy ? r.fuzzyMatchCode : r.productCode}","${r.name || ''}","${r.brand || ''}","${r.category || ''}","${r.clridx || ''}","${r.colourCode || ''}","${r.gender || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productRange || ''}","${r.productSubCategory || ''}","${r.productType || ''}","${r.styleColour || ''}","${r.colorVariantCount ?? 0}"`)
       .join('\n');
 
     const failureRows = results
-      .filter(r => r.status === 'FAILURE')
+      .filter(r => r.status === 'FAILURE' || r.status === 'FUZZY')
       .map(r => `"${r.fileName}","${r.brandHint}","${r.attempts.join(' | ')}","${r.reason}"`)
       .join('\n');
 
