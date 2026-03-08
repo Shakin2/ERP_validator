@@ -107,12 +107,10 @@ export const parseFilename = (inputName: string, path: string = ""): ExtractedIn
 
   return {
     fileName: inputName,
-    fullPath: path,
+    filePath: path,
     brandHint,
     candidateCodes: uniqueCandidates,
-    productCode: uniqueCandidates[0] || "", 
     colorCode: colorCode,
-    tokens: allTokens
   };
 };
 
