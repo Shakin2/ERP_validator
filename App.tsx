@@ -426,24 +426,27 @@ const App: React.FC = () => {
           const codeList = safeCodes.map(c => `'${c}'`).join(',');
           
           const query = `
-            SELECT 
-              Name, 
-              StyleBrand, 
-              StyleCategory, 
-              CLRIDX, 
-              CLRCode, 
-              StyleGender, 
-              EndUse, 
-              Model, 
-              StyleRange, 
-              SubCategory, 
-              StyleProdType, 
-              StyleCode, 
+            SELECT
+              Name,
+              StyleBrand,
+              StyleCategory,
+              CLRIDX,
+              CLRCode,
+              CLRName,
+              StyleGender,
+              EndUse,
+              Model,
+              StyleRange,
+              SubCategory,
+              StyleProdType,
+              StyleCode,
               StyleColour,
-              StyleSubRange
+              StyleSubRange,
+              ProductAgeGroup,
+              STYLEIDX
             FROM sportsdirect_sql.dbo.ap21_product
             WHERE UPPER(StyleCode) IN (${safeCodes.map(c => `UPPER('${c}')`).join(',')})
-            AND CLRName IS NOT NULL 
+            AND CLRName IS NOT NULL
             AND CLRCode IS NOT NULL
             AND CLRCode != "NULL"
             AND TRIM(COALESCE(CLRCode, '')) != ''
@@ -457,7 +460,7 @@ const App: React.FC = () => {
               productCode: cleanProductCode(String(row.stylecode || '').toUpperCase().trim()),
               styleCode: cleanProductCode(String(row.stylecode || '').toUpperCase().trim()),
               clrCode: cleanProductCode(String(row.clrcode || '').toUpperCase().trim()),
-              
+
               // Required fields
               name: String(row.name || '').trim(),
               brand: String(row.stylebrand || '').toUpperCase().trim(),
@@ -472,7 +475,10 @@ const App: React.FC = () => {
               productType: String(row.styleprodtype || '').trim(),
               styleColour: String(row.stylecolour || '').trim(),
               styleSubRange: String(row.stylesubrange || '').trim(),
-              
+              ageGroup: String(row.productagegroup || '').trim(),
+              clrName: String(row.clrname || '').trim(),
+              styleIdx: String(row.styleidx || '').trim(),
+
               // Legacy compatibility
               styleCategory: String(row.stylecategory || '').trim(),
               productName: String(row.name || '').trim()
@@ -826,24 +832,27 @@ const App: React.FC = () => {
                 const safeCodes = chunk.map(c => c.replace(/'/g, "''").trim());
                 
                 const query = `
-                  SELECT 
-                    Name, 
-                    StyleBrand, 
-                    StyleCategory, 
-                    CLRIDX, 
-                    CLRCode, 
-                    StyleGender, 
-                    EndUse, 
-                    Model, 
-                    StyleRange, 
-                    SubCategory, 
-                    StyleProdType, 
-                    StyleCode, 
+                  SELECT
+                    Name,
+                    StyleBrand,
+                    StyleCategory,
+                    CLRIDX,
+                    CLRCode,
+                    CLRName,
+                    StyleGender,
+                    EndUse,
+                    Model,
+                    StyleRange,
+                    SubCategory,
+                    StyleProdType,
+                    StyleCode,
                     StyleColour,
-                    StyleSubRange
+                    StyleSubRange,
+                    ProductAgeGroup,
+                    STYLEIDX
                   FROM sportsdirect_sql.dbo.ap21_product
                   WHERE UPPER(StyleCode) IN (${safeCodes.map(c => `UPPER('${c}')`).join(',')})
-                  AND CLRName IS NOT NULL 
+                  AND CLRName IS NOT NULL
                   AND CLRCode IS NOT NULL
                   AND CLRCode != "NULL"
                   AND TRIM(COALESCE(CLRCode, '')) != ''
@@ -870,9 +879,12 @@ const App: React.FC = () => {
                     productSubCategory: String(row.subcategory || '').trim(),
                     productType: String(row.styleprodtype || '').trim(),
                     styleColour: String(row.stylecolour || '').trim(),
+                    styleSubRange: String(row.stylesubrange || '').trim(),
+                    ageGroup: String(row.productagegroup || '').trim(),
+                    clrName: String(row.clrname || '').trim(),
+                    styleIdx: String(row.styleidx || '').trim(),
                     styleCategory: String(row.stylecategory || '').trim(),
-                    productName: String(row.name || '').trim(),
-                    styleSubRange: String(row.stylesubrange || '').trim()
+                    productName: String(row.name || '').trim()
                   }));
                   
                   colorFetchedRecords = [...colorFetchedRecords, ...records];
@@ -1068,12 +1080,16 @@ const App: React.FC = () => {
   };
 
   const exportResults = () => {
-    const successHeader = "File Name,Status,Product Code,Name,Brand,Category,CLRIDX,Colour Code,Gender,Product End Use,Product Model,Product Range,Style Sub Range,Product Sub Category,Product Type,Style Colour,Colour Variant Count\n";
+    const successHeader = "File Name,ID,Status,ProductCode,ColourCode,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style.Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,CLR Count,Category Success,Category,Angle Success,Angle Assigned\n";
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
       .filter(r => r.status === 'SUCCESS' || r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name')
-      .map(r => `"${r.fileName}","${r.status}","${r.isFuzzy ? r.fuzzyMatchCode : r.productCode}","${r.name || ''}","${r.brand || ''}","${r.category || ''}","${r.clridx || ''}","${r.colourCode || ''}","${r.gender || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productRange || ''}","${r.productSubCategory || ''}","${r.productType || ''}","${r.styleColour || ''}","${r.colorVariantCount ?? 0}"`)
+      .map(r => {
+        const id = r.fileName.replace(/\.[^/.]+$/, '');
+        const productCode = r.isFuzzy ? r.fuzzyMatchCode : r.productCode;
+        return `"${r.fileName}","${id}","${r.status}","${productCode || ''}","${r.colourCode || ''}","${r.name || ''}","${r.productRange || ''}","${r.brand || ''}","${r.category || ''}","${r.gender || ''}","${r.productType || ''}","${r.styleSubRange || ''}","${r.styleColour || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productSubCategory || ''}","${r.clridx || ''}","${r.ageGroup || ''}","${r.clrName || ''}","${r.styleIdx || ''}","${r.colorVariantCount ?? 0}","","","",""`;
+      })
       .join('\n');
 
     const failureRows = results
