@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import FileUploadZone from './components/FileUploadZone';
 import ResultsTable from './components/ResultsTable';
 import { ERPRecord, MatchResult, FileStatus, ExtractedInfo, QueryLog } from './types';
@@ -16,6 +16,9 @@ const App: React.FC = () => {
   const [status, setStatus] = useState<FileStatus>(FileStatus.IDLE);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<QueryLog[]>([]);
+
+  // Cancellation flag — checked at each async boundary in processEntries
+  const cancelRef = useRef(false);
 
   // Configuration State
   const [host, setHost] = useState(DEFAULT_DATABRICKS_HOST);
@@ -331,10 +334,11 @@ const App: React.FC = () => {
       return;
     }
 
+    cancelRef.current = false;
     setSyncError(null);
     setDebugLogs([]);
     setStatus(FileStatus.PARSING);
-    
+
     let accumulatedLogs: QueryLog[] = [];
 
     try {
@@ -392,9 +396,11 @@ const App: React.FC = () => {
         setSyncError(`Failed to fetch StyleCodes (Stage 1): ${err.message}`);
         setStatus(FileStatus.ERROR);
         setDebugLogs(accumulatedLogs);
-        return; 
+        return;
       }
-      
+
+      if (cancelRef.current) { setStatus(FileStatus.IDLE); return; }
+
       // Validate which of our candidates exist in the database
       const foundKeys: { styleCode: string }[] = [];
       
@@ -496,8 +502,10 @@ const App: React.FC = () => {
             setDebugLogs(accumulatedLogs);
             return;
           }
+
+          if (cancelRef.current) { setStatus(FileStatus.IDLE); return; }
         }
-        
+
         console.log(`Stage 2 Complete: Fetched ${fetchedRecords.length} total detailed records`);
       }
 
@@ -522,9 +530,9 @@ const App: React.FC = () => {
 
       console.log(`Color counts computed for ${styleCodeDistinctColorCount.size} StyleCodes`);
       
-      // Log which StyleCodes have >2 colors for debugging
+      // Log which StyleCodes have >1 color for debugging
       styleCodeDistinctColorCount.forEach((count, sc) => {
-        if (count > 2) {
+        if (count > 1) {
           const records = styleCodeRecordsMap.get(sc) || [];
           const colors = [...new Set(records.map(r => r.clrCode))];
           console.log(`[Multi-color] StyleCode ${sc} has ${count} distinct CLRCodes: ${colors.join(', ')}`);
@@ -534,7 +542,15 @@ const App: React.FC = () => {
       // Fetch color name->code mappings for name-based resolution (needed for multi-color matching)
       const colorMap = await fetchColorMappings();
 
-      const allErpCodes = erpData.flatMap(d => [d.styleCode, d.clrCode]).filter(Boolean);
+      // Pre-build lookup maps so direct matches are O(1) instead of O(n) per candidate
+      const erpByStyleCode = new Map<string, ERPRecord>();
+      const erpByClrCode = new Map<string, ERPRecord>();
+      erpData.forEach(d => {
+        if (d.styleCode && !erpByStyleCode.has(d.styleCode)) erpByStyleCode.set(d.styleCode, d);
+        if (d.clrCode && !erpByClrCode.has(d.clrCode)) erpByClrCode.set(d.clrCode, d);
+      });
+      // Deduplicated list of all ERP codes for fuzzy matching
+      const allErpCodes = [...new Set([...erpByStyleCode.keys(), ...erpByClrCode.keys()])];
 
       let matchedResults: MatchResult[] = extractedInfos.map(info => {
         // Clean and sort attempts (longest first, uppercase, no brackets)
@@ -546,11 +562,9 @@ const App: React.FC = () => {
         let directMatch: ERPRecord | undefined = undefined;
         let matchedAtStage: string | undefined = undefined;
 
-        // Try direct match (longest codes first)
+        // Try direct match (longest codes first) — O(1) per candidate via Map
         for (const candidate of attempts) {
-          const found = erpData.find(d => 
-            d.styleCode === candidate || d.clrCode === candidate
-          );
+          const found = erpByStyleCode.get(candidate) || erpByClrCode.get(candidate);
           if (found) {
             directMatch = found;
             matchedAtStage = candidate;
@@ -562,8 +576,8 @@ const App: React.FC = () => {
           const matchedStyleCode = directMatch.styleCode;
           const colorCount = styleCodeDistinctColorCount.get(matchedStyleCode) || 0;
 
-          // --- MULTI-COLOR VALIDATION (>2 distinct CLRCodes for this StyleCode) ---
-          if (colorCount > 2) {
+          // --- MULTI-COLOR VALIDATION (>1 distinct CLRCode for this StyleCode) ---
+          if (colorCount > 1) {
             console.log(`[Multi-color] StyleCode ${matchedStyleCode} has ${colorCount} colors — validating color from filename "${info.fileName}"`);
 
             const recordsForStyle = styleCodeRecordsMap.get(matchedStyleCode) || [];
@@ -731,7 +745,7 @@ const App: React.FC = () => {
         }
 
         if (bestFuzzy) {
-          const fuzzyRecord = erpData.find(d => d.styleCode === bestFuzzy!.code || d.clrCode === bestFuzzy!.code);
+          const fuzzyRecord = erpByStyleCode.get(bestFuzzy!.code) || erpByClrCode.get(bestFuzzy!.code);
           
           if (fuzzyRecord) {
             const filenameColorCount = countColorComponents(attempts[0]);
@@ -893,27 +907,39 @@ const App: React.FC = () => {
                 } catch (err: any) {
                   console.warn("Color detail fetch failed:", err.message);
                 }
+
+                if (cancelRef.current) { setStatus(FileStatus.IDLE); return; }
               }
-              
+
               console.log(`Color stage fetched ${colorFetchedRecords.length} detailed records`);
               
+              // Pre-compute Maps and lookup structures once, outside the per-file loop
+              const colorByStyleCode = new Map<string, ERPRecord>();
+              const colorByClrCode = new Map<string, ERPRecord>();
+              colorFetchedRecords.forEach(d => {
+                if (d.styleCode && !colorByStyleCode.has(d.styleCode)) colorByStyleCode.set(d.styleCode, d);
+                if (d.clrCode && !colorByClrCode.has(d.clrCode)) colorByClrCode.set(d.clrCode, d);
+              });
+              const colorErpCodes = [...new Set([...colorByStyleCode.keys(), ...colorByClrCode.keys()])];
+              const colorEnhancedInfosMap = new Map(
+                colorEnhancedInfos.map((ci: any) => [ci?.fileName, ci])
+              );
+
               matchedResults = matchedResults.map(result => {
                 if (result.status !== 'FAILURE') return result;
-                
-                const colorInfo = colorEnhancedInfos.find((ci: any) => ci?.fileName === result.fileName);
+
+                const colorInfo = colorEnhancedInfosMap.get(result.fileName);
                 if (!colorInfo) return result;
-                
-                const sortedColorCandidates = colorInfo.candidateCodes.sort((a, b) => b.length - a.length);
-                
+
+                const sortedColorCandidates = colorInfo.candidateCodes.sort((a: string, b: string) => b.length - a.length);
+
                 for (const candidate of sortedColorCandidates) {
-                  const found = colorFetchedRecords.find(d => 
-                    d.styleCode === candidate || d.clrCode === candidate
-                  );
+                  const found = colorByStyleCode.get(candidate) || colorByClrCode.get(candidate);
                   if (found) {
                     const filenameColorCount = countColorComponents(sortedColorCandidates[0]);
                     const matchedColorCount = countColorComponents(candidate);
                     const needsCheck = filenameColorCount > matchedColorCount && matchedColorCount > 0;
-                    
+
                     return {
                       ...result,
                       productCode: candidate,
@@ -929,21 +955,18 @@ const App: React.FC = () => {
                     };
                   }
                 }
-                
-                const colorErpCodes = colorFetchedRecords.flatMap(d => [d.styleCode, d.clrCode]).filter(Boolean);
+
                 let bestFuzzy: { code: string; distance: number; source: string } | null = null;
-                
+
                 for (const candidate of sortedColorCandidates) {
                   const fuzzy = findBestFuzzyMatch(candidate, colorErpCodes, 2);
                   if (fuzzy && (!bestFuzzy || fuzzy.distance < bestFuzzy.distance)) {
                     bestFuzzy = { ...fuzzy, source: candidate };
                   }
                 }
-                
+
                 if (bestFuzzy) {
-                  const fuzzyRecord = colorFetchedRecords.find(d => 
-                    d.styleCode === bestFuzzy!.code || d.clrCode === bestFuzzy!.code
-                  );
+                  const fuzzyRecord = colorByStyleCode.get(bestFuzzy!.code) || colorByClrCode.get(bestFuzzy!.code);
                   if (fuzzyRecord) {
                     const filenameColorCount = countColorComponents(sortedColorCandidates[0]);
                     const matchedColorCount = countColorComponents(bestFuzzy.code);
@@ -1050,7 +1073,13 @@ const App: React.FC = () => {
     }
   }, [processEntries]);
 
+  const handleStop = () => {
+    cancelRef.current = true;
+    setStatus(FileStatus.IDLE);
+  };
+
   const handleReset = () => {
+    cancelRef.current = true;
     setResults([]);
     setSyncError(null);
     setDebugLogs([]);
@@ -1130,18 +1159,32 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            {results.length > 0 && (
+            {isWorking && (
+              <button
+                onClick={handleStop}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl font-semibold text-sm hover:bg-red-700 transition-all shadow-md flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
+                </svg>
+                Stop
+              </button>
+            )}
+            {(results.length > 0 || isWorking) && (
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Reset All
+              </button>
+            )}
+            {results.length > 0 && !isWorking && (
               <>
-                <button 
-                  onClick={handleReset}
-                  className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Reset All
-                </button>
-                <button 
+                <button
                   onClick={exportDebugLogs}
                   className="px-4 py-2 bg-slate-800 text-white rounded-xl font-semibold text-sm hover:bg-slate-900 transition-all shadow-md flex items-center gap-2"
                   title="Download raw SQL request/response logs"
@@ -1151,7 +1194,7 @@ const App: React.FC = () => {
                   </svg>
                   Debug Logs
                 </button>
-                <button 
+                <button
                   onClick={exportResults}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-all shadow-md flex items-center gap-2"
                 >

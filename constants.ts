@@ -17,6 +17,9 @@ export const COLOR_MAPPINGS: Record<string, string> = {
 
 export const BRANDS_WITH_DASH_RULE = ['SKECHERS', 'HOKA', 'SAUCONY', '2XU'];
 
+// Filename prefixes that should be stripped before parsing (case-insensitive)
+export const STRIP_PREFIXES = ['MRLW'];
+
 export const NOISE_WORDS = new Set([
   'NIKE', 'ADIDAS', 'SKECHERS', 'ASICS', 'HOKA', 'SAUCONY', '2XU',
   'AURORA', 'AIR', 'MAX', 'VAPOR', 'FLYKNIT', 'PLUS', 'IMAGERY',

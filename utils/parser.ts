@@ -1,5 +1,5 @@
 
-import { BRANDS_WITH_DASH_RULE, DELIMITERS, COLOR_MAPPINGS, NOISE_WORDS } from '../constants';
+import { BRANDS_WITH_DASH_RULE, DELIMITERS, COLOR_MAPPINGS, NOISE_WORDS, STRIP_PREFIXES } from '../constants';
 import { ExtractedInfo } from '../types';
 
 export const normalizeColor = (code: string): string => {
@@ -21,8 +21,15 @@ const isDescriptiveWord = (token: string): boolean => {
 };
 
 export const parseFilename = (inputName: string, path: string = ""): ExtractedInfo => {
-  // Strip MRLW- prefix (case-insensitive) as it is not relevant for matching
-  const cleanedName = inputName.replace(/^MRLW-/i, '');
+  // Strip known prefixes (e.g. "MRLW-") that are not relevant for matching
+  let cleanedName = inputName;
+  for (const prefix of STRIP_PREFIXES) {
+    const regex = new RegExp(`^${prefix}-`, 'i');
+    if (regex.test(cleanedName)) {
+      cleanedName = cleanedName.replace(regex, '');
+      break;
+    }
+  }
 
   const nameNoExt = cleanedName.includes('.')
     ? cleanedName.substring(0, cleanedName.lastIndexOf('.'))
@@ -100,12 +107,10 @@ export const parseFilename = (inputName: string, path: string = ""): ExtractedIn
 
   return {
     fileName: inputName,
-    fullPath: path,
+    filePath: path,
     brandHint,
     candidateCodes: uniqueCandidates,
-    productCode: uniqueCandidates[0] || "", 
     colorCode: colorCode,
-    tokens: allTokens
   };
 };
 
