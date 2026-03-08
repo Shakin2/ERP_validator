@@ -530,9 +530,9 @@ const App: React.FC = () => {
 
       console.log(`Color counts computed for ${styleCodeDistinctColorCount.size} StyleCodes`);
       
-      // Log which StyleCodes have >2 colors for debugging
+      // Log which StyleCodes have >1 color for debugging
       styleCodeDistinctColorCount.forEach((count, sc) => {
-        if (count > 2) {
+        if (count > 1) {
           const records = styleCodeRecordsMap.get(sc) || [];
           const colors = [...new Set(records.map(r => r.clrCode))];
           console.log(`[Multi-color] StyleCode ${sc} has ${count} distinct CLRCodes: ${colors.join(', ')}`);
@@ -576,8 +576,8 @@ const App: React.FC = () => {
           const matchedStyleCode = directMatch.styleCode;
           const colorCount = styleCodeDistinctColorCount.get(matchedStyleCode) || 0;
 
-          // --- MULTI-COLOR VALIDATION (>2 distinct CLRCodes for this StyleCode) ---
-          if (colorCount > 2) {
+          // --- MULTI-COLOR VALIDATION (>1 distinct CLRCode for this StyleCode) ---
+          if (colorCount > 1) {
             console.log(`[Multi-color] StyleCode ${matchedStyleCode} has ${colorCount} colors — validating color from filename "${info.fileName}"`);
 
             const recordsForStyle = styleCodeRecordsMap.get(matchedStyleCode) || [];
