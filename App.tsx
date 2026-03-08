@@ -1080,7 +1080,7 @@ const App: React.FC = () => {
   };
 
   const exportResults = () => {
-    const successHeader = "File Name,ID,Status,ProductCode,ColourCode,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style.Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,CLR Count,Category Success,Category,Angle Success,Angle Assigned\n";
+    const successHeader = "File Name,ID,Status,Product Code,Colour Code,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,Colour Variant Count,Category Success,Category,Angle Success,Angle Assigned\n";
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
