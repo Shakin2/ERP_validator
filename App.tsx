@@ -1020,8 +1020,8 @@ const App: React.FC = () => {
     const validFiles = Array.from(files).filter(f => {
       // Skip entries with no name
       if (!f.name) return false;
-      // Skip hidden files (starting with .)
-      if (f.name.startsWith('.')) return false;
+      // Skip hidden files (starting with . or _)
+      if (f.name.startsWith('.') || f.name.startsWith('_')) return false;
       // Skip system files
       if (f.name === 'Thumbs.db' || f.name === '.DS_Store' || f.name === 'desktop.ini') return false;
       // Skip zero-byte files with no extension (likely folder entries)
