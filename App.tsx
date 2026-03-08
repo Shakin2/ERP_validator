@@ -584,6 +584,10 @@ const App: React.FC = () => {
 
             const recordsForStyle = styleCodeRecordsMap.get(matchedStyleCode) || [];
             const availableClrCodes = [...new Set(recordsForStyle.map(r => r.clrCode))];
+            const availableColorsSummary = recordsForStyle
+              .filter((r, i, arr) => arr.findIndex(x => x.clrCode === r.clrCode) === i)
+              .map(r => r.clrName ? `${r.clrCode} (${r.clrName})` : r.clrCode)
+              .join(', ');
 
             // 1. Extract color hint from filename (part right after the style code)
             const colorHint = extractColorHintFromFilename(info.fileName, matchedStyleCode);
@@ -602,7 +606,7 @@ const App: React.FC = () => {
                   isFuzzy: false,
                   ...directColorMatch,
                   status: 'SUCCESS' as const,
-                  reason: `Multi-color match: StyleCode ${matchedStyleCode} + CLRCode ${colorHint} (${colorCount} colours available)`
+                  reason: `Multi-color match: StyleCode ${matchedStyleCode} + CLRCode ${colorHint} | Available: ${availableColorsSummary}`
                 };
               }
 
@@ -621,7 +625,7 @@ const App: React.FC = () => {
                     isFuzzy: false,
                     ...nameMatch,
                     status: 'SUCCESS' as const,
-                    reason: `Multi-color match: StyleCode ${matchedStyleCode} + colour "${upperHint}" -> CLRCode ${mappedCode} (${colorCount} colours available)`
+                    reason: `Multi-color match: StyleCode ${matchedStyleCode} + colour "${upperHint}" -> CLRCode ${mappedCode} | Available: ${availableColorsSummary}`
                   };
                 }
               }
@@ -641,7 +645,7 @@ const App: React.FC = () => {
                   fuzzyMatchCode: partialColorMatch.clrCode,
                   ...partialColorMatch,
                   status: 'FUZZY' as const,
-                  reason: `Multi-color partial: "${colorHint}" ~ CLRCode "${partialColorMatch.clrCode}" (${colorCount} colours available)`
+                  reason: `Multi-color partial: "${colorHint}" ~ CLRCode "${partialColorMatch.clrCode}" | Available: ${availableColorsSummary}`
                 };
               }
 
@@ -659,7 +663,7 @@ const App: React.FC = () => {
                       isFuzzy: false,
                       ...reverseMatch,
                       status: 'SUCCESS' as const,
-                      reason: `Multi-color match: StyleCode ${matchedStyleCode} + CLRCode ${colorHint} (${colorCount} colours available)`
+                      reason: `Multi-color match: StyleCode ${matchedStyleCode} + CLRCode ${colorHint} | Available: ${availableColorsSummary}`
                     };
                   }
                   break;
@@ -683,7 +687,7 @@ const App: React.FC = () => {
                   fuzzyMatchCode: startsWithMatch.clrCode,
                   ...startsWithMatch,
                   status: 'FUZZY' as const,
-                  reason: `Multi-color partial: "${colorHint}" matches first part of CLRCode "${startsWithMatch.clrCode}" (${colorCount} colours available)`
+                  reason: `Multi-color partial: "${colorHint}" matches first part of CLRCode "${startsWithMatch.clrCode}" | Available: ${availableColorsSummary}`
                 };
               }
 
@@ -698,7 +702,7 @@ const App: React.FC = () => {
                 ...directMatch,
                 colorVariantCount: colorCount,
                 status: 'Multi Colour AP21 - Cant Find' as const,
-                reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours. Colour hint "${colorHint}" not resolved. Available CLRCodes: ${availableClrCodes.join(', ')}`
+                reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours. Colour hint "${colorHint}" not resolved. Available: ${availableColorsSummary}`
               };
             }
 
@@ -713,7 +717,7 @@ const App: React.FC = () => {
               ...directMatch,
               colorVariantCount: colorCount,
               status: 'Multi Colour AP21 - No Reference' as const,
-              reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours but no colour detected in filename. Available CLRCodes: ${availableClrCodes.join(', ')}`
+              reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours but no colour detected in filename. Available: ${availableColorsSummary}`
             };
           }
 
