@@ -299,10 +299,10 @@ const App: React.FC = () => {
     }
   }, [token, host, path]);
 
-  const findColorInFilename = useCallback((filename: string, colorMap: Map<string, string>): string | null => {
+  const findColorInFilename = useCallback((filename: string, sortedColorEntries: [string, string][]): string | null => {
     const upperFilename = filename.toUpperCase();
-    
-    const sortedColors = Array.from(colorMap.entries()).sort((a, b) => b[0].length - a[0].length);
+
+    const sortedColors = sortedColorEntries;
     
     for (const [colorName, colorCode] of sortedColors) {
       if (colorName.length < 3 || 
@@ -541,6 +541,8 @@ const App: React.FC = () => {
 
       // Fetch color name->code mappings for name-based resolution (needed for multi-color matching)
       const colorMap = await fetchColorMappings();
+      // Sort once here — avoids re-sorting 83k entries on every findColorInFilename call
+      const sortedColorEntries = Array.from(colorMap.entries()).sort((a, b) => b[0].length - a[0].length);
 
       // Pre-build lookup maps so direct matches are O(1) instead of O(n) per candidate
       const erpByStyleCode = new Map<string, ERPRecord>();
@@ -802,7 +804,7 @@ const App: React.FC = () => {
           
           const colorEnhancedInfos = failureEntries.map(entry => {
             const baseInfo = parseFilename(entry!.name, entry!.path);
-            const detectedColor = findColorInFilename(entry!.name, colorMap);
+            const detectedColor = findColorInFilename(entry!.name, sortedColorEntries);
             
             if (detectedColor && baseInfo.candidateCodes.length > 0) {
               const baseCode = cleanProductCode(baseInfo.candidateCodes[0].split('-')[0].split('_')[0].toUpperCase());
