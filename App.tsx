@@ -426,24 +426,27 @@ const App: React.FC = () => {
           const codeList = safeCodes.map(c => `'${c}'`).join(',');
           
           const query = `
-            SELECT 
-              Name, 
-              StyleBrand, 
-              StyleCategory, 
-              CLRIDX, 
-              CLRCode, 
-              StyleGender, 
-              EndUse, 
-              Model, 
-              StyleRange, 
-              SubCategory, 
-              StyleProdType, 
-              StyleCode, 
+            SELECT
+              Name,
+              StyleBrand,
+              StyleCategory,
+              CLRIDX,
+              CLRCode,
+              CLRName,
+              StyleGender,
+              EndUse,
+              Model,
+              StyleRange,
+              SubCategory,
+              StyleProdType,
+              StyleCode,
               StyleColour,
-              StyleSubRange
+              StyleSubRange,
+              ProductAgeGroup,
+              STYLEIDX
             FROM sportsdirect_sql.dbo.ap21_product
             WHERE UPPER(StyleCode) IN (${safeCodes.map(c => `UPPER('${c}')`).join(',')})
-            AND CLRName IS NOT NULL 
+            AND CLRName IS NOT NULL
             AND CLRCode IS NOT NULL
             AND CLRCode != "NULL"
             AND TRIM(COALESCE(CLRCode, '')) != ''
@@ -457,7 +460,7 @@ const App: React.FC = () => {
               productCode: cleanProductCode(String(row.stylecode || '').toUpperCase().trim()),
               styleCode: cleanProductCode(String(row.stylecode || '').toUpperCase().trim()),
               clrCode: cleanProductCode(String(row.clrcode || '').toUpperCase().trim()),
-              
+
               // Required fields
               name: String(row.name || '').trim(),
               brand: String(row.stylebrand || '').toUpperCase().trim(),
@@ -472,7 +475,10 @@ const App: React.FC = () => {
               productType: String(row.styleprodtype || '').trim(),
               styleColour: String(row.stylecolour || '').trim(),
               styleSubRange: String(row.stylesubrange || '').trim(),
-              
+              ageGroup: String(row.productagegroup || '').trim(),
+              clrName: String(row.clrname || '').trim(),
+              styleIdx: String(row.styleidx || '').trim(),
+
               // Legacy compatibility
               styleCategory: String(row.stylecategory || '').trim(),
               productName: String(row.name || '').trim()
@@ -674,7 +680,8 @@ const App: React.FC = () => {
                 isMatch: true,
                 isFuzzy: false,
                 ...directMatch,
-                status: 'CHECKED' as const,
+                colorVariantCount: colorCount,
+                status: 'Multi Colour AP21 - Cant Find' as const,
                 reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours. Colour hint "${colorHint}" not resolved. Available CLRCodes: ${availableClrCodes.join(', ')}`
               };
             }
@@ -688,7 +695,8 @@ const App: React.FC = () => {
               isMatch: true,
               isFuzzy: false,
               ...directMatch,
-              status: 'CHECKED' as const,
+              colorVariantCount: colorCount,
+              status: 'Multi Colour AP21 - No Reference' as const,
               reason: `StyleCode ${matchedStyleCode} has ${colorCount} colours but no colour detected in filename. Available CLRCodes: ${availableClrCodes.join(', ')}`
             };
           }
@@ -705,8 +713,9 @@ const App: React.FC = () => {
             isMatch: true,
             isFuzzy: false,
             ...directMatch,
-            status: needsCheck ? 'CHECKED' as const : 'SUCCESS' as const,
-            reason: needsCheck 
+            colorVariantCount: colorCount,
+            status: needsCheck ? 'Multi Colour in Name' as const : 'SUCCESS' as const,
+            reason: needsCheck
               ? `Partial match: ${matchedAtStage} (filename suggests more colors)`
               : `Direct match: ${matchedAtStage}`
           };
@@ -736,7 +745,8 @@ const App: React.FC = () => {
               isFuzzy: true,
               fuzzyMatchCode: bestFuzzy.code,
               ...fuzzyRecord,
-              status: needsCheck ? 'CHECKED' as const : 'FUZZY' as const,
+              colorVariantCount: styleCodeDistinctColorCount.get(fuzzyRecord.styleCode) || 0,
+              status: needsCheck ? 'Multi Colour in Name' as const : 'FUZZY' as const,
               reason: needsCheck
                 ? `Fuzzy partial match: "${bestFuzzy.source}" to "${bestFuzzy.code}" (filename suggests more colors)`
                 : `Fuzzy matched "${bestFuzzy.source}" to "${bestFuzzy.code}"`
@@ -760,7 +770,7 @@ const App: React.FC = () => {
       setResults(matchedResults);
       setStatus(FileStatus.PROCESSING);
 
-      console.log(`Initial validation complete: ${matchedResults.filter(r => r.status === 'SUCCESS').length} success, ${matchedResults.filter(r => r.status === 'FUZZY').length} fuzzy, ${matchedResults.filter(r => r.status === 'CHECKED').length} checked, ${matchedResults.filter(r => r.status === 'FAILURE').length} failed`);
+      console.log(`Initial validation complete: ${matchedResults.filter(r => r.status === 'SUCCESS').length} success, ${matchedResults.filter(r => r.status === 'FUZZY').length} fuzzy, ${matchedResults.filter(r => r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name').length} checked, ${matchedResults.filter(r => r.status === 'FAILURE').length} failed`);
 
       // --- STAGE 4: Color-Based Fallback (ONLY for failures) ---
       const failedMatches = matchedResults.filter(r => r.status === 'FAILURE');
@@ -822,24 +832,27 @@ const App: React.FC = () => {
                 const safeCodes = chunk.map(c => c.replace(/'/g, "''").trim());
                 
                 const query = `
-                  SELECT 
-                    Name, 
-                    StyleBrand, 
-                    StyleCategory, 
-                    CLRIDX, 
-                    CLRCode, 
-                    StyleGender, 
-                    EndUse, 
-                    Model, 
-                    StyleRange, 
-                    SubCategory, 
-                    StyleProdType, 
-                    StyleCode, 
+                  SELECT
+                    Name,
+                    StyleBrand,
+                    StyleCategory,
+                    CLRIDX,
+                    CLRCode,
+                    CLRName,
+                    StyleGender,
+                    EndUse,
+                    Model,
+                    StyleRange,
+                    SubCategory,
+                    StyleProdType,
+                    StyleCode,
                     StyleColour,
-                    StyleSubRange
+                    StyleSubRange,
+                    ProductAgeGroup,
+                    STYLEIDX
                   FROM sportsdirect_sql.dbo.ap21_product
                   WHERE UPPER(StyleCode) IN (${safeCodes.map(c => `UPPER('${c}')`).join(',')})
-                  AND CLRName IS NOT NULL 
+                  AND CLRName IS NOT NULL
                   AND CLRCode IS NOT NULL
                   AND CLRCode != "NULL"
                   AND TRIM(COALESCE(CLRCode, '')) != ''
@@ -866,9 +879,12 @@ const App: React.FC = () => {
                     productSubCategory: String(row.subcategory || '').trim(),
                     productType: String(row.styleprodtype || '').trim(),
                     styleColour: String(row.stylecolour || '').trim(),
+                    styleSubRange: String(row.stylesubrange || '').trim(),
+                    ageGroup: String(row.productagegroup || '').trim(),
+                    clrName: String(row.clrname || '').trim(),
+                    styleIdx: String(row.styleidx || '').trim(),
                     styleCategory: String(row.stylecategory || '').trim(),
-                    productName: String(row.name || '').trim(),
-                    styleSubRange: String(row.stylesubrange || '').trim()
+                    productName: String(row.name || '').trim()
                   }));
                   
                   colorFetchedRecords = [...colorFetchedRecords, ...records];
@@ -905,7 +921,8 @@ const App: React.FC = () => {
                       isMatch: true,
                       isFuzzy: false,
                       ...found,
-                      status: needsCheck ? 'CHECKED' as const : 'SUCCESS' as const,
+                      colorVariantCount: styleCodeDistinctColorCount.get(found.styleCode) || 0,
+                      status: needsCheck ? 'Multi Colour in Name' as const : 'SUCCESS' as const,
                       reason: needsCheck
                         ? `Color-based partial match: ${candidate} (filename suggests more colors)`
                         : `Color-based match: ${candidate}`
@@ -939,7 +956,8 @@ const App: React.FC = () => {
                       isFuzzy: true,
                       fuzzyMatchCode: bestFuzzy.code,
                       ...fuzzyRecord,
-                      status: needsCheck ? 'CHECKED' as const : 'FUZZY' as const,
+                      colorVariantCount: styleCodeDistinctColorCount.get(fuzzyRecord.styleCode) || 0,
+                      status: needsCheck ? 'Multi Colour in Name' as const : 'FUZZY' as const,
                       reason: needsCheck
                         ? `Color-based fuzzy partial match: "${bestFuzzy.source}" to "${bestFuzzy.code}" (filename suggests more colors)`
                         : `Color-based fuzzy match: "${bestFuzzy.source}" to "${bestFuzzy.code}"`
@@ -950,8 +968,8 @@ const App: React.FC = () => {
                 return result;
               });
               
-              const newSuccesses = matchedResults.filter(r => 
-                (r.status === 'SUCCESS' || r.status === 'CHECKED') && r.reason?.includes('Color-based')
+              const newSuccesses = matchedResults.filter(r =>
+                (r.status === 'SUCCESS' || r.status === 'Multi Colour in Name') && r.reason?.includes('Color-based')
               ).length;
               
               console.log(`Color fallback recovered ${newSuccesses} additional matches`);
@@ -1062,16 +1080,20 @@ const App: React.FC = () => {
   };
 
   const exportResults = () => {
-    const successHeader = "File Name,Status,Product Code,Name,Brand,Category,CLRIDX,Colour Code,Gender,Product End Use,Product Model,Product Range,Style Sub Range,Product Sub Category,Product Type,Style Colour\n";
+    const successHeader = "File Name,ID,Status,Product Code,Colour Code,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,Colour Variant Count,Category Success,Category,Angle Success,Angle Assigned\n";
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
-      .filter(r => r.status === 'SUCCESS' || r.status === 'FUZZY' || r.status === 'CHECKED')
-      .map(r => `"${r.fileName}","${r.status}","${r.isFuzzy ? r.fuzzyMatchCode : r.productCode}","${r.name || ''}","${r.brand || ''}","${r.category || ''}","${r.clridx || ''}","${r.colourCode || ''}","${r.gender || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productRange || ''}","${r.productSubCategory || ''}","${r.productType || ''}","${r.styleColour || ''}"`)
+      .filter(r => r.status === 'SUCCESS' || r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name')
+      .map(r => {
+        const id = r.fileName.replace(/\.[^/.]+$/, '');
+        const productCode = r.isFuzzy ? r.fuzzyMatchCode : r.productCode;
+        return `"${r.fileName}","${id}","${r.status}","${productCode || ''}","${r.colourCode || ''}","${r.name || ''}","${r.productRange || ''}","${r.brand || ''}","${r.category || ''}","${r.gender || ''}","${r.productType || ''}","${r.styleSubRange || ''}","${r.styleColour || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productSubCategory || ''}","${r.clridx || ''}","${r.ageGroup || ''}","${r.clrName || ''}","${r.styleIdx || ''}","${r.colorVariantCount ?? 0}","","","",""`;
+      })
       .join('\n');
 
     const failureRows = results
-      .filter(r => r.status === 'FAILURE')
+      .filter(r => r.status === 'FAILURE' || r.status === 'FUZZY')
       .map(r => `"${r.fileName}","${r.brandHint}","${r.attempts.join(' | ')}","${r.reason}"`)
       .join('\n');
 
@@ -1087,7 +1109,7 @@ const App: React.FC = () => {
     total: results.length,
     success: results.filter(r => r.status === 'SUCCESS').length,
     fuzzy: results.filter(r => r.status === 'FUZZY').length,
-    checked: results.filter(r => r.status === 'CHECKED').length,
+    checked: results.filter(r => r.status === 'Multi Colour AP21 - Cant Find' || r.status === 'Multi Colour AP21 - No Reference' || r.status === 'Multi Colour in Name').length,
     failure: results.filter(r => r.status === 'FAILURE').length
   };
 

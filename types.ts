@@ -10,13 +10,13 @@ export enum FileStatus {
   ERROR = 'ERROR'
 }
 
-export type MatchStatus = 'SUCCESS' | 'FUZZY' | 'CHECKED' | 'FAILURE';
+export type MatchStatus = 'SUCCESS' | 'FUZZY' | 'Multi Colour AP21 - Cant Find' | 'Multi Colour AP21 - No Reference' | 'Multi Colour in Name' | 'FAILURE';
 
 export interface ERPRecord {
   productCode: string;
   styleCode: string;
   clrCode: string;
-  
+
   // All required fields
   name: string;
   brand: string;
@@ -31,7 +31,10 @@ export interface ERPRecord {
   productType: string;
   styleColour: string;
   styleSubRange: string;
-  
+  ageGroup: string;
+  clrName: string;
+  styleIdx: string;
+
   // Legacy compatibility
   styleCategory: string;
   productName: string;
@@ -72,6 +75,10 @@ export interface MatchResult extends ExtractedInfo {
   erpStyleCategory?: string;
   erpProductName?: string;
   
+  ageGroup?: string;
+  clrName?: string;
+  styleIdx?: string;
+  colorVariantCount?: number;
   status: MatchStatus;
   reason: string;
 }

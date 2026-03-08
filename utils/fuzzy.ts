@@ -31,25 +31,69 @@ export const getLevenshteinDistance = (a: string, b: string): number => {
 };
 
 /**
- * Finds the best match in a list of codes based on Levenshtein distance.
+ * Structural fuzzy matching for product codes.
+ *
+ * Splits codes on '-' and requires the base style code (first segment)
+ * to match EXACTLY. Only allows fuzziness (distance ≤1) on the
+ * remaining variant/colour segments.
+ *
+ * e.g. "ABC-123" will only match candidates starting with "ABC-",
+ * and only if the suffix ("123") is within 1 edit of the candidate's suffix.
+ *
+ * For codes without a '-', falls back to exact-prefix matching:
+ * the candidate must start with the target (or vice versa) and differ
+ * by at most 1 trailing character.
  */
 export const findBestFuzzyMatch = (
   target: string,
   candidates: string[],
   threshold: number = 2
 ): { code: string; distance: number } | null => {
-  let bestMatch = null;
+  const upperTarget = target.toUpperCase();
+  const targetParts = upperTarget.split('-');
+  const targetBase = targetParts[0];
+  const targetSuffix = targetParts.slice(1).join('-');
+
+  let bestMatch: string | null = null;
   let minDistance = Infinity;
 
   for (const candidate of candidates) {
-    const distance = getLevenshteinDistance(target.toUpperCase(), candidate.toUpperCase());
-    if (distance < minDistance) {
-      minDistance = distance;
-      bestMatch = candidate;
+    const upperCandidate = candidate.toUpperCase();
+    if (upperCandidate === upperTarget) continue; // skip exact matches (handled elsewhere)
+
+    const candidateParts = upperCandidate.split('-');
+    const candidateBase = candidateParts[0];
+    const candidateSuffix = candidateParts.slice(1).join('-');
+
+    // Base style code must match exactly
+    if (targetBase !== candidateBase) continue;
+
+    // Both have suffixes — compare them with tight threshold (≤1 edit)
+    if (targetSuffix && candidateSuffix) {
+      const suffixDistance = getLevenshteinDistance(targetSuffix, candidateSuffix);
+      if (suffixDistance <= 1 && suffixDistance < minDistance) {
+        minDistance = suffixDistance;
+        bestMatch = candidate;
+      }
+      continue;
+    }
+
+    // Target has suffix but candidate doesn't (or vice versa) —
+    // only match if the suffix is very short (1 char), treating it as distance 1
+    if (targetSuffix && !candidateSuffix && targetSuffix.length <= 1) {
+      if (1 < minDistance) {
+        minDistance = 1;
+        bestMatch = candidate;
+      }
+    } else if (!targetSuffix && candidateSuffix && candidateSuffix.length <= 1) {
+      if (1 < minDistance) {
+        minDistance = 1;
+        bestMatch = candidate;
+      }
     }
   }
 
-  if (bestMatch && minDistance <= threshold) {
+  if (bestMatch && minDistance <= 1) {
     return { code: bestMatch, distance: minDistance };
   }
 
