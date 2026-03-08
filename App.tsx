@@ -1115,7 +1115,7 @@ const App: React.FC = () => {
   };
 
   const exportResults = () => {
-    const successHeader = "File Name,ID,Status,Product Code,Colour Code,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,Colour Variant Count,Category Success,Category,Angle Success,Angle Assigned\n";
+    const successHeader = "File Name,ID,Status,Reason,Product Code,Colour Code,Name,Product Range,Brand,Category,Gender,Product Type,Sub Range,Style Colour,Product End Use,Product Model,Product Sub Category,Clr IDX,AgeGroup,CLRName,STYLEIDX,Colour Variant Count,Category Success,Category,Angle Success,Angle Assigned\n";
     const failureHeader = "File Name,Brand Hint,Attempted Codes,Reason\n";
 
     const successRows = results
@@ -1123,7 +1123,9 @@ const App: React.FC = () => {
       .map(r => {
         const id = r.fileName.replace(/\.[^/.]+$/, '');
         const productCode = r.isFuzzy ? r.fuzzyMatchCode : r.productCode;
-        return `"${r.fileName}","${id}","${r.status}","${productCode || ''}","${r.colourCode || ''}","${r.name || ''}","${r.productRange || ''}","${r.brand || ''}","${r.category || ''}","${r.gender || ''}","${r.productType || ''}","${r.styleSubRange || ''}","${r.styleColour || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productSubCategory || ''}","${r.clridx || ''}","${r.ageGroup || ''}","${r.clrName || ''}","${r.styleIdx || ''}","${r.colorVariantCount ?? 0}","","","",""`;
+        const variantCount = r.colorVariantCount ?? 0;
+        const statusWithCount = variantCount > 1 ? `${r.status} (${variantCount})` : r.status;
+        return `"${r.fileName}","${id}","${statusWithCount}","${(r.reason || '').replace(/"/g, '""')}","${productCode || ''}","${r.colourCode || ''}","${r.name || ''}","${r.productRange || ''}","${r.brand || ''}","${r.category || ''}","${r.gender || ''}","${r.productType || ''}","${r.styleSubRange || ''}","${r.styleColour || ''}","${r.productEndUse || ''}","${r.productModel || ''}","${r.productSubCategory || ''}","${r.clridx || ''}","${r.ageGroup || ''}","${r.clrName || ''}","${r.styleIdx || ''}","${variantCount}","","","",""`;
       })
       .join('\n');
 
