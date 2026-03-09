@@ -2,40 +2,37 @@
 # MAGIC %md
 # MAGIC # ERP Image Validator — Internal Brands
 # MAGIC
-# MAGIC Ports the web-app validation pipeline to run natively in Databricks.
-# MAGIC Reads image filenames from mounted cloud storage, matches them against
-# MAGIC `sportsdirect_sql.dbo.ap21_product`, and writes success/failure CSVs.
+# MAGIC Reads filenames for a given batch from `product_images.imageprocessing.uploaded_images`,
+# MAGIC matches them against `sportsdirect_sql.dbo.ap21_product`, and writes results to Delta.
 # MAGIC
 # MAGIC **Stages**
-# MAGIC 1. List image files from storage path
-# MAGIC 2. Parse filenames → candidate ERP codes
-# MAGIC 3. Load ERP data directly via `spark.sql()`
-# MAGIC 4. Match: direct → multi-colour resolution → fuzzy → colour-hint fallback
-# MAGIC 5. Write results to DBFS / Delta
+# MAGIC 1. Receive `batchID` widget from the upstream notebook
+# MAGIC 2. Load filenames for that batch from the uploaded_images table
+# MAGIC 3. Parse filenames → candidate ERP codes
+# MAGIC 4. Load ERP data directly via `spark.sql()`
+# MAGIC 5. Match: direct → multi-colour resolution → fuzzy → failure
+# MAGIC 6. Write success/failure results to Delta
 
 # COMMAND ----------
 # MAGIC %md ## Configuration — edit these before running
 
 # COMMAND ----------
 
-# Input path: root folder containing brand sub-folders on mounted storage
-# Example: "dbfs:/mnt/imagery/" or "abfss://container@account.dfs.core.windows.net/imagery/"
-INPUT_PATH = "dbfs:/mnt/imagery/"
-
-# Only process these brands (folder names under INPUT_PATH).
-# Set to None or [] to process every folder found.
-BRANDS_TO_PROCESS = [
-    # "NIKE",
-    # "ADIDAS",
-    # "HOKA",
-]
-
-# Output folder for result CSVs (written as single-file CSVs via coalesce)
+# Output table / folder for results
 OUTPUT_PATH = "dbfs:/mnt/erp-validator/results/"
 
-# Image extensions to include
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".tiff", ".tif",
-                    ".svg", ".avif", ".bmp"}
+# COMMAND ----------
+# MAGIC %md ## Batch parameter (passed from upstream notebook)
+
+# COMMAND ----------
+
+dbutils.widgets.text("batchID", "", "Batch ID")
+batch_id = dbutils.widgets.get("batchID")
+
+if not batch_id:
+    raise ValueError("batchID widget is empty — this notebook must be called with a batchID value.")
+
+print(f"Processing batch: {batch_id}")
 
 # COMMAND ----------
 # MAGIC %md ## Imports & constants
@@ -493,48 +490,18 @@ def match_file(parsed: dict) -> dict:
     return base_result
 
 # COMMAND ----------
-# MAGIC %md ## List image files
+# MAGIC %md ## Load filenames for this batch
 
 # COMMAND ----------
 
-def _list_images(root: str, brands: list[str]) -> list[tuple[str, str]]:
-    """
-    Recursively lists image files under `root`.
-    If `brands` is non-empty only descend into those sub-folders.
-    Returns list of (file_name, full_path).
-    """
-    results = []
-    try:
-        top_level = dbutils.fs.ls(root)
-    except Exception as e:
-        print(f"Could not list {root}: {e}")
-        return results
+batch_df = spark.sql(f"""
+    SELECT file_name
+    FROM product_images.imageprocessing.uploaded_images
+    WHERE batchID = '{batch_id}'
+""")
 
-    for entry in top_level:
-        folder_name = entry.name.rstrip("/")
-        if brands and folder_name.upper() not in {b.upper() for b in brands}:
-            continue
-        _recurse(entry.path, results)
-
-    return results
-
-
-def _recurse(path: str, out: list):
-    try:
-        entries = dbutils.fs.ls(path)
-    except Exception:
-        return
-    for e in entries:
-        if e.isDir():
-            _recurse(e.path, out)
-        else:
-            ext = "." + e.name.rsplit(".", 1)[-1].lower() if "." in e.name else ""
-            if ext in IMAGE_EXTENSIONS:
-                out.append((e.name, e.path))
-
-
-image_files = _list_images(INPUT_PATH, BRANDS_TO_PROCESS)
-print(f"Image files found: {len(image_files):,}")
+image_files = [(row["file_name"], "") for row in batch_df.collect()]
+print(f"Files in batch '{batch_id}': {len(image_files):,}")
 
 # COMMAND ----------
 # MAGIC %md ## Run validation
@@ -542,8 +509,8 @@ print(f"Image files found: {len(image_files):,}")
 # COMMAND ----------
 
 results = []
-for file_name, file_path in image_files:
-    parsed = parse_filename(file_name, file_path)
+for file_name, _ in image_files:
+    parsed = parse_filename(file_name)   # no path — brand_hint will be UNKNOWN
     result = match_file(parsed)
     results.append(result)
 
@@ -638,20 +605,22 @@ failure_rows = [
 success_df = spark.createDataFrame(success_rows, schema=SUCCESS_SCHEMA)
 failure_df = spark.createDataFrame(failure_rows, schema=FAILURE_SCHEMA)
 
-# Write as single CSV files
+# Write as single CSV files, partitioned by batch
+batch_output = OUTPUT_PATH + batch_id + "/"
+
 (
     success_df.coalesce(1)
     .write.mode("overwrite")
     .option("header", "true")
-    .csv(OUTPUT_PATH + "validation_success")
+    .csv(batch_output + "validation_success")
 )
 
 (
     failure_df.coalesce(1)
     .write.mode("overwrite")
     .option("header", "true")
-    .csv(OUTPUT_PATH + "validation_failed")
+    .csv(batch_output + "validation_failed")
 )
 
-print(f"Results written to {OUTPUT_PATH}")
+print(f"Results written to {batch_output}")
 display(success_df)
